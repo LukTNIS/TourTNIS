@@ -5,26 +5,29 @@ import (
 	"fmt"
 
 	"com.mission/mission3/entity"
+
+	_ "github.com/lib/pq"
 )
 
-func ConnectDB(dbConfig entity.ConfigDBInput) *sql.DB {
-	psqlInfo := fmt.Sprintf("postgresql://%v:%v@%v:%v/%v?sslmode=disable",
+func ConnectDB(dbConfig entity.ConfigDBInput) (*sql.DB, error) {
+	sqlInfo := fmt.Sprintf("postgresql://%v:%v@%v:%v/%v?sslmode=disable",
 		dbConfig.Username,
 		dbConfig.Password,
 		dbConfig.Host,
 		dbConfig.Port,
 		dbConfig.Dbname)
 
-	db, err := sql.Open("postgres", psqlInfo)
+	fmt.Println("sqlInfo:", sqlInfo)
+	db, err := sql.Open("postgres", sqlInfo)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	err = db.Ping()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	fmt.Println("Successfully connected!")
-	return db
+	return db, nil
 }

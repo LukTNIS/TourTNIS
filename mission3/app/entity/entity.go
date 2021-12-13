@@ -52,6 +52,13 @@ type ConfigDBInput struct {
 	Dbname   string `json:"dbname"`
 }
 
+type FindInterestRateOutput struct {
+	PromotionName string  `json:"promotion_name"`
+	InterestRate  float64 `json:"interest_rate"`
+	StartDate     Date    `json:"start_date"`
+	EndDate       Date    `json:"end_date"`
+}
+
 func (d Date) String() string {
 	return time.Time(d).Format("2006-01-02")
 }

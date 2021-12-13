@@ -13,19 +13,22 @@ import (
 	"com.mission/mission3/txt"
 )
 
-func RecordInstallmentAmountListByMonth(dbConfig entity.ConfigDBInput) {
+func RecordInstallmentAmountListByMonth(dbConfig entity.ConfigDBInput) error {
 	dateInput := os.Args[1:][0]
 	dateInputArr := strings.Split(dateInput, "-")
 	dataDate := strings.Join(dateInputArr, "")
 
-	db := database.ConnectDB(dbConfig)
+	db, err := database.ConnectDB(dbConfig)
+	if err != nil {
+		return err
+	}
 	defer db.Close()
 
 	startMonth := fmt.Sprintf(`%s-%s-01`, dateInputArr[0], dateInputArr[1])
 
 	endMonthInt, err := strconv.Atoi(dateInputArr[1])
 	if err != nil {
-		panic(err)
+		return err
 	}
 	NextMonth := strconv.Itoa(endMonthInt + 1)
 	if len(NextMonth) == 1 {
@@ -35,13 +38,16 @@ func RecordInstallmentAmountListByMonth(dbConfig entity.ConfigDBInput) {
 	query := fmt.Sprintf(`SELECT * FROM account WHERE cal_date >= '%s' AND cal_date <= '%s' ORDER BY cal_date ASC`, startMonth, endMonth)
 	rows, err := db.Query(query)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	fmt.Println("pass")
 	defer rows.Close()
 
 	var fileName string = formatinput.FileName(dataDate)
-	txt.WriteHeader(fileName, dataDate)
+	os.Remove(fileName)
+	err = txt.WriteHeader(fileName, dataDate)
+	if err != nil {
+		return err
+	}
 
 	var account entity.Account
 	var totalRecord int
@@ -49,19 +55,29 @@ func RecordInstallmentAmountListByMonth(dbConfig entity.ConfigDBInput) {
 	for rows.Next() {
 		err = rows.Scan(&account.AccountNumber, &account.DisbursementAmount, &account.NumberOfPayment, &account.CalDate)
 		if err != nil {
-			panic(err)
+			return err
 		}
-		promotionName, interestRate, startDate, endDate := cal.FindInterestRate(db, account.CalDate)
+		findInterestRateOutput, err := cal.FindInterestRate(db, account.CalDate)
+		if err != nil {
+			return err
+		}
 
-		pmtInput := formatinput.PmtInput(account.DisbursementAmount, account.NumberOfPayment, interestRate, account.CalDate)
+		pmtInput := formatinput.PmtInput(account.DisbursementAmount, account.NumberOfPayment, findInterestRateOutput.InterestRate, account.CalDate)
 		installmentAmount := cal.CalculatePMT(pmtInput)
-		writeRecordInput := formatinput.WriteRecordInput(account.AccountNumber, installmentAmount, account.NumberOfPayment, interestRate, promotionName, startDate, endDate)
+		writeRecordInput := formatinput.WriteRecordInput(account.AccountNumber, installmentAmount, account.NumberOfPayment, findInterestRateOutput.InterestRate, findInterestRateOutput.PromotionName, findInterestRateOutput.StartDate, findInterestRateOutput.EndDate)
 
-		txt.WriteRecord(fileName, writeRecordInput)
+		err = txt.WriteRecord(fileName, writeRecordInput)
+		if err != nil {
+			return err
+		}
 
 		totalRecord++
 		totalAmount += installmentAmount
 	}
 
-	txt.WriteFooter(fileName, totalRecord, totalAmount)
+	err = txt.WriteFooter(fileName, totalRecord, totalAmount)
+	if err != nil {
+		return err
+	}
+	return nil
 }

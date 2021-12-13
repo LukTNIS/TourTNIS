@@ -17,5 +17,8 @@ const (
 func main() {
 	dbConfig := formatinput.ConfigDBInput(host, port, username, password, dbname)
 
-	main2.RecordInstallmentAmountListByMonth(dbConfig)
+	err := main2.RecordInstallmentAmountListByMonth(dbConfig)
+	if err != nil {
+		panic(err)
+	}
 }

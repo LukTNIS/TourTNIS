@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"regexp"
 	"testing"
+	"time"
 
 	"com.mission/mission3/entity"
 	"github.com/DATA-DOG/go-sqlmock"
@@ -61,14 +63,23 @@ func TestFindInterestRate(t *testing.T) {
 	db, mock := NewMock()
 	defer db.Close()
 
+	var calDateInput string = "2020-07-02"
 	var calDate entity.Date
-	json.Unmarshal([]byte(`"2020-07-02"`), &calDate)
+	json.Unmarshal([]byte(fmt.Sprintf(`"%s"`, calDateInput)), &calDate)
 
 	var startDate entity.Date
 	json.Unmarshal([]byte(`"2020-07-01"`), &startDate)
+	startDateMock, err := time.Parse("2006-01-02", "2020-07-01")
+	if err != nil {
+		panic(err)
+	}
 
 	var endDate entity.Date
 	json.Unmarshal([]byte(`"2020-12-30"`), &endDate)
+	endDateMock, err := time.Parse("2006-01-02", "2020-12-30")
+	if err != nil {
+		panic(err)
+	}
 
 	promotion = entity.Promotion{
 		PromotionName: "Promo3",
@@ -76,52 +87,78 @@ func TestFindInterestRate(t *testing.T) {
 		StartDate:     startDate,
 		EndDate:       endDate,
 	}
+	rate := entity.Rate{
+		Rate:          "RatePromo3",
+		InterestRate:  25,
+		PromotionName: "Promo3",
+	}
 
 	type args struct {
 		db        *sql.DB
 		dateInput entity.Date
 	}
 	tests := []struct {
-		name  string
-		args  args
-		want  string
-		want1 float64
-		want2 entity.Date
-		want3 entity.Date
+		name    string
+		args    args
+		want    entity.FindInterestRateOutput
+		wantErr bool
 	}{
 		{
-			name:  "Find Interest Rate",
-			args:  args{db: db, dateInput: calDate},
-			want:  "Promo3",
-			want1: 25.0,
-			want2: startDate,
-			want3: endDate,
+			name: "Find Interest Rate is match.",
+			args: args{db: db, dateInput: calDate},
+			want: entity.FindInterestRateOutput{
+				PromotionName: "Promo3",
+				InterestRate:  25.0,
+				StartDate:     startDate,
+				EndDate:       endDate,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Find Interest Rate is not match.",
+			args: args{db: db, dateInput: calDate},
+			want: entity.FindInterestRateOutput{
+				PromotionName: "Promo2",
+				InterestRate:  25.0,
+				StartDate:     startDate,
+				EndDate:       endDate,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Find Interest Rate is error.",
+			args: args{db: db, dateInput: calDate},
+			want: entity.FindInterestRateOutput{
+				PromotionName: "Promo3",
+				InterestRate:  25.0,
+				StartDate:     startDate,
+			},
+			wantErr: true,
 		},
 	}
 
-	query := "SELECT * FROM promotion WHERE start_date <= '\\?' AND end_date >= '\\?';"
-
-	fmt.Println("pass1")
-	rows := sqlmock.NewRows([]string{"promotion_name", "description", "start_date", "end_date"}).
-		AddRow(promotion.PromotionName, promotion.Description, "2020-07-01", "2020-12-30")
-
-	fmt.Println("pass2")
-	mock.ExpectQuery(query).WithArgs(promotion.PromotionName).WillReturnRows(rows)
+	// fmt.Println(query, rows, query2, rows2)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, got2, got3 := FindInterestRate(tt.args.db, tt.args.dateInput)
-			fmt.Println("pass3")
-			if got != tt.want {
-				t.Errorf("FindInterestRate() got = %v, want %v", got, tt.want)
+			query := fmt.Sprintf("SELECT * FROM promotion WHERE start_date <= '%s' AND end_date >= '%s';", calDateInput, calDateInput)
+
+			rows := sqlmock.NewRows([]string{"promotion_name", "description", "start_date", "end_date"}).
+				AddRow(promotion.PromotionName, promotion.Description, startDateMock, endDateMock)
+
+			mock.ExpectQuery(regexp.QuoteMeta(query)).WillReturnRows(rows)
+
+			query2 := fmt.Sprintf("SELECT * FROM rate WHERE promotion_name = '%s';", tt.want.PromotionName)
+			rows2 := sqlmock.NewRows([]string{"rate", "interest_rate", "promotion_name"}).AddRow(rate.Rate, rate.InterestRate, rate.PromotionName)
+			mock.ExpectQuery(regexp.QuoteMeta(query2)).WillReturnRows(rows2)
+
+			got, err := FindInterestRate(tt.args.db, tt.args.dateInput)
+			fmt.Println(err != nil, tt.wantErr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FindInterestRate() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if got1 != tt.want1 {
-				t.Errorf("FindInterestRate() got1 = %v, want %v", got1, tt.want1)
-			}
-			if !reflect.DeepEqual(got2, tt.want2) {
-				t.Errorf("FindInterestRate() got2 = %v, want %v", got2, tt.want2)
-			}
-			if !reflect.DeepEqual(got3, tt.want3) {
-				t.Errorf("FindInterestRate() got3 = %v, want %v", got3, tt.want3)
+			if !reflect.DeepEqual(got, tt.want) && !tt.wantErr {
+				t.Errorf("FindInterestRate() = %v, want %v", got, tt.want)
 			}
 		})
 	}

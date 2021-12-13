@@ -1,11 +1,10 @@
 package txt
 
 import (
-	"log"
 	"os"
 )
 
-func WriteFileByLine(fileName string, textInput string) {
+func WriteFileByLine(fileName string, textInput string) error {
 	var f *os.File
 	var err error
 	if _, err = os.Stat(fileName); err == nil {
@@ -14,7 +13,7 @@ func WriteFileByLine(fileName string, textInput string) {
 		f, err = os.Create(fileName)
 	}
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	defer f.Close()
@@ -22,6 +21,7 @@ func WriteFileByLine(fileName string, textInput string) {
 	_, err2 := f.WriteString(textInput + "\n")
 
 	if err2 != nil {
-		log.Fatal(err2)
+		return err2
 	}
+	return nil
 }
